@@ -1,4 +1,4 @@
-name: "P60: Install 3DX Platform"
+name: "Install 3DX Platform"
 
 on:
   workflow_dispatch:
