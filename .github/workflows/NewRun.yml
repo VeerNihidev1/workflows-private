@@ -25,4 +25,4 @@ jobs:
         env:
           ANSIBLE_FORCE_COLOR: '1'
         run: |
-         cd ${{ github.workspace }}/AnsibleTest.yml
+         cd /AnsibleTest.yml
