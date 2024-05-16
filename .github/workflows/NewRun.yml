@@ -21,8 +21,17 @@ jobs:
     runs-on: self-hosted
     name: Prepare installation
     steps:
+        
+      - name: "Checkout the repository"
+        uses: actions/checkout@v2
+        with:
+          path: ${{ github.actor }}
+
+      - name: "Create the user working directory"
+        run: |
+          mkdir -p ${{ github.workspace }}/${{ github.actor }}
       - name: "Check yml"
         env:
           ANSIBLE_FORCE_COLOR: '1'
         run: |
-         cd /AnsibleTest.yml
+         cd ${{ github.workspace }}/${{ github.actor }}/AnsibleTest.yml
