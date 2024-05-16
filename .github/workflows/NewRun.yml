@@ -25,4 +25,4 @@ jobs:
         env:
           ANSIBLE_FORCE_COLOR: '1'
         run: |
-          /workflow-private/AnsibleTest.yml
+          AnsibleTest.yml
