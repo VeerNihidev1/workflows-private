@@ -1,0 +1,332 @@
+name: "P60: Install 3DX Platform"
+
+on:
+  workflow_dispatch:
+    inputs:
+      prepare:
+        description: "Prepare Platform"
+        required: true
+        default: "true"
+      vendors:
+        description: "Download Vendors Media"
+        required: true
+        default: "false"
+      media:
+        description: "Download Dassault Media"
+        required: true
+        default: "false"
+      platform:
+        description: "Install Platform"
+        required: true
+        default: "false"
+
+jobs:
+  configure:
+    runs-on: self-hosted
+    timeout-minutes: 720
+    if: ${{ github.event.inputs.prepare == 'true' }}
+    name: Prepare installation
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@v2
+        with:
+          path: ${{ github.actor }}
+
+      - name: "Create the user working directory"
+        run: |
+          mkdir -p ${{ github.workspace }}/${{ github.actor }}/.azure
+
+      - name: "Login to Azure"
+        run: az login --identity --allow-no-subscriptions
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      - name: "Define vault password from Azure Keystore"
+        run: |
+          rm -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          az keyvault secret download --vault-name kv-3dxdevops-qa -n 3dx-automation-p60-secret -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      # - name: "Define vault from Azure Keystore"
+      #   run: |
+      #     chmod +x ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh
+      #     bash ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/group_vars/all/vault.yaml kv-3dxdevops-qa
+      #     chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+      #   env:
+      #     HTTP_PROXY: http://app.mydomain.com:80
+      #     HTTPS_PROXY: http://app.mydomain.com:80
+      #     NO_PROXY: 169.254.169.254
+
+      - name: "Common task"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/common.yml
+
+      - name: "Mount nfs storage for media and vendors"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/mount-storage.yml
+
+      - name: "Install certificates"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/certificates.yml
+
+      - name: "Download dassault media"
+        if: ${{ github.event.inputs.media == 'true' }}
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/media.yml
+
+      - name: "Download vendors media"
+        if: ${{ github.event.inputs.vendors == 'true' }}
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/vendors.yml
+
+      - name: "Install oracle client on all necessary machines"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/oracle-client.yml
+
+      - name: "Install FCS encryption dependencies on all necessary machines"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/fcs-encryption.yml
+
+  install-part1:
+    runs-on: self-hosted
+    timeout-minutes: 720
+    if: ${{ github.event.inputs.platform == 'true' }}
+    needs: configure
+    name: 3DX Platform Part 1
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@v2
+        with:
+          path: ${{ github.actor }}
+
+      - name: "Create the user working directory"
+        run: |
+          mkdir -p ${{ github.workspace }}/${{ github.actor }}/.azure
+
+      - name: "Login to Azure"
+        run: az login --identity --allow-no-subscriptions
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      - name: "Define vault password from Azure Keystore"
+        run: |
+          rm -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          az keyvault secret download --vault-name kv-3dxdevops-qa -n 3dx-automation-p60-secret -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      # - name: "Define vault from Azure Keystore"
+      #   run: |
+      #     chmod +x ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh
+      #     bash ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/group_vars/all/vault.yaml kv-3dxdevops-qa
+      #     chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+      #   env:
+      #     HTTP_PROXY: http://app.mydomain.com:80
+      #     HTTPS_PROXY: http://app.mydomain.com:80
+      #     NO_PROXY: 169.254.169.254
+
+      - name: "Install 3DPassport"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-passport.yml
+
+      - name: "Install 3DDashboard"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-dashboard.yml
+
+      - name: "Install 3DSearch"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-search.yml
+
+      - name: "Install 3DIndexingServer"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-indexingserver.yml
+
+      - name: "Install 3DSpace Index"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-spaceindex.yml
+
+      - name: "Install 3DSwym Foundation"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-swym.yml
+
+      - name: "Install 3DSwym Index (Including CloudView & Video Converter)"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-swymindex.yml
+
+      - name: "Install 3DComment"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-comment.yml
+
+      - name: "Install 3DNotification"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-notification.yml
+
+  install-part2:
+    runs-on: self-hosted
+    timeout-minutes: 720
+    if: ${{ github.event.inputs.platform == 'true' }}
+    needs: [configure,install-part1]
+    name: 3DX Platform Part 2
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@v2
+        with:
+          path: ${{ github.actor }}
+
+      - name: "Create the user working directory"
+        run: |
+          mkdir -p ${{ github.workspace }}/${{ github.actor }}/.azure
+
+      - name: "Login to Azure"
+        run: az login --identity --allow-no-subscriptions
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      - name: "Define vault password from Azure Keystore"
+        run: |
+          rm -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          az keyvault secret download --vault-name kv-3dxdevops-qa -n 3dx-automation-p60-secret -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      # - name: "Define vault from Azure Keystore"
+      #   run: |
+      #     chmod +x ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh
+      #     bash ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/group_vars/all/vault.yaml kv-3dxdevops-qa
+      #     chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+      #   env:
+      #     HTTP_PROXY: http://app.mydomain.com:80
+      #     HTTPS_PROXY: http://app.mydomain.com:80
+      #     NO_PROXY: 169.254.169.254
+
+      - name: "Install 3DSpace"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/3ds-space.yml
+
+  heath-check:
+    runs-on: self-hosted
+    if: ${{ always() }}
+    needs: [install-part1,install-part2]
+    name: Post Install Heath Check
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@v2
+        with:
+          path: ${{ github.actor }}
+
+      - name: "Create the user working directory"
+        run: |
+          mkdir -p ${{ github.workspace }}/${{ github.actor }}/.azure
+
+      - name: "Login to Azure"
+        run: az login --identity --allow-no-subscriptions
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      - name: "Define vault password from Azure Keystore"
+        run: |
+          rm -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          az keyvault secret download --vault-name kv-3dxdevops-qa -n 3dx-automation-p60-secret -f ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+          chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+        env:
+          HTTP_PROXY: http://app.mydomain.com:80
+          HTTPS_PROXY: http://app.mydomain.com:80
+          NO_PROXY: 169.254.169.254
+
+      # - name: "Define vault from Azure Keystore"
+      #   run: |
+      #     chmod +x ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh
+      #     bash ${{ github.workspace }}/${{ github.actor }}/.github/scripts/create_vault.sh ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/group_vars/all/vault.yaml kv-3dxdevops-qa
+      #     chmod 600 ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password
+      #   env:
+      #     HTTP_PROXY: http://app.mydomain.com:80
+      #     HTTPS_PROXY: http://app.mydomain.com:80
+      #     NO_PROXY: 169.254.169.254
+
+      - name: "Run Platform p60 Heath Check"
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          cd ${{ github.workspace }}/${{ github.actor }}/
+          ansible-galaxy collection install -r ${{ github.workspace }}/${{ github.actor }}/requirements.yml
+          ansible-playbook --vault-password-file ${{ github.workspace }}/${{ github.actor }}/.azure/vault-password -i ${{ github.workspace }}/${{ github.actor }}/playbooks/inventories/p60/inventory.yml ${{ github.workspace }}/${{ github.actor }}/playbooks/health-checks.yml
