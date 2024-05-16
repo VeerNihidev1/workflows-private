@@ -34,4 +34,5 @@ jobs:
         env:
           ANSIBLE_FORCE_COLOR: '1'
         run: |
-         cd ${{ github.workspace }}/${{ github.actor }}/AnsibleTest.yml
+         cd ${{ github.workspace }}/${{ github.actor }}/
+         ansible-playbook -i ${{ github.workspace }}/${{ github.actor }}/AnsibleTest.yml
