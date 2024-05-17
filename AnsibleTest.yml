@@ -1,15 +1,78 @@
 ---
-
-- name: Network Getting Started First Playbook
-  connection: ansible.netcommon.network_cli
-  gather_facts: false
-  hosts: localhost
-  tasks:
-
-    - name: Get config for VyOS devices
-      vyos.vyos.vyos_facts:
-        gather_subset: all
-
-    - name: Display the config
-      debug:
-        msg: "The hostname is {{ ansible_net_hostname }} and the OS is {{ ansible_net_version }}"
+  - name: Install listed packages via yum
+    yum:
+      #state: absent
+      state: installed
+      enablerepo: base_current,updates_current,epel
+      skip_broken: yes
+      name:
+        - glibc-devel.i686
+        - glibc-devel.x86_64
+        - glibc-common
+        - glibc.i686
+        - nss-soft*
+        - ksh.x86_64
+        - libaio-devel.i686
+        - libaio-devel.x86_64
+        - libaio.x86_64
+        - libaio.i686
+        - libstdc++
+        #- libgcc.i686
+        - numactl-devel.x86_64
+        - compat-libcap1.i686
+        - compat-libcap1.x86_64
+        - libXt.i686
+        - libXtst.i686
+        - libXtst-devel.i686
+        - libXtst-devel.x86_64
+        - libICE.i686
+        - libSM.i686
+        #- libX11.i686
+        - libuuid*
+        - libxcb.i686
+        - libXau.i686
+        - libXcomposite.x86_64
+        - libpng.i686
+        - libpng.x86_64
+        - libpng12.i686
+        - libpng12.x86_64
+        - libjpeg-turbo-devel.i686
+        - libjpeg-turbo-devel.x86_64
+        - redhat-lsb-core.x86_64
+        - redhat-lsb-submod-security.x86_64
+        - spax.x86_64
+        - motif.x86_64
+        - libXp.x86_64
+        - xorg-x11-xbitmaps.noarch
+        #- httpd.x86_64
+        #- httpd-tools.x86_64
+        - mod_ssl.x86_64
+        - compat-libstdc++-33.i686
+        - compat-libstdc++-33.x86_64
+        - xorg-x11-server-Xvfb.x86_64
+        - gd.x86_64
+        - mod_ssl.x86_64
+        - motif.x86_64
+        - epel-release
+        - git.x86_64      
+        - unzip.x86_64
+        - vnc-server
+        - xorg-x11-xauth.x86_64
+        - xorg-x11-apps.x86_64
+        - xdpyinfo
+        - xterm.x86_64
+        - metacity.x86_64
+          #- tigervnc-server.x86_64
+        - mailcap.noarch
+        - pcre.x86_64
+        - pcre-devel.x86_64
+        - zlib.x86_64
+        - zlib-devel.x86_64
+        - openssl-devel.x86_64
+        - expat-devel.x86_64
+        - rsync.x86_64
+        - pyOpenSSL.x86_64
+        - nfs-utils
+    become: true
+    become_method: sudo
+    become_user: root
